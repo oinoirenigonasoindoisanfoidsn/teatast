@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import urllib.request as urllib
+import urllib3.request as urllib
 from bs4 import BeautifulSoup
 import random
 import re
