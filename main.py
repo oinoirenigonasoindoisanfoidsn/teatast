@@ -5,8 +5,6 @@ import re
 import os
 import webbrowser
 
-# Install required packages in Colab
-!pip install bandcamp-downloader
 
 # --------------------------------------------------------------------------------------
 # Get the HTML for the page of the provided link and store it in a Beautiful Soup format
