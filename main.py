@@ -1,67 +1,80 @@
-import urllib.request as urllib
-from bs4 import BeautifulSoup
-import numpy
-import re
 import os
+import sys
+import requests
+from bs4 import BeautifulSoup
+import re
 
-# Function to fetch the HTML for a given link and parse it with BeautifulSoup
-def fetch_and_parse_html(link):
-    page = urllib.urlopen(link)
-    return BeautifulSoup(page, "html.parser")
+def get_album_links():
+    """Fetch album links from the random album page."""
+    url = 'https://random-album.com/'
 
-# Function to randomly select an artist's page from the first page
-def select_random_artist_page(main_link):
-    formatted_first_page = fetch_and_parse_html(main_link)
-    page_list = formatted_first_page.find('ul', {"class": 'pagelist'})
-    if not page_list:
-        print("\nLooks like an incorrect tag was entered! The program will now close.")
-        return None
-    number_of_pages = len(page_list.find_all("li"))
-    random_page_number = numpy.random.randint(1, number_of_pages + 1)
-    return f"{main_link}?page={random_page_number}"
+    response = requests.get(url)
 
-# Function to randomly select an artist from a given page
-def select_random_artist(url):
-    artist_links = []
-    artist_page = fetch_and_parse_html(url)
-    all_artist_list = artist_page.find('ul', {"class": 'item_list'})
-    for list_item in all_artist_list.find_all("a"):
-        artist_homepage = list_item.get("href")
-        artist_links.append(artist_homepage)
-    random_artist_link = numpy.random.choice(artist_links)
-    return random_artist_link
+    if response.status_code == 200:
+        print(f"Successfully fetched the page: {url}")
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-# Function to randomly select an album from a given artist
-def select_random_album(artist_link):
-    artist_albums = []
-    search_for = r'\S*(\.com|\.net|\.uk)'
-    artist_base_link = re.search(search_for, artist_link)
-    unformatted_artist_page = urllib.urlopen(artist_base_link.group(0))
-    formatted_artist_page = BeautifulSoup(unformatted_artist_page, "html.parser")
-    album_section = formatted_artist_page.find('div', {"class": 'leftMiddleColumns'})
-    album_number_check = formatted_artist_page.find('div', {"class": 'trackView'})
-    
-    if album_number_check is None:
-        for list_item in album_section.find_all("a"):
-            album_sub_link = list_item.get("href")
-            artist_albums.append(artist_base_link.group(0) + album_sub_link)
-        random_album_link = numpy.random.choice(artist_albums)
-        return random_album_link
+        # Find all anchor tags with href attribute
+        links = soup.find_all('a', href=True)
+
+        # Filter links that match the /album pattern
+        album_links = []
+        for link in links:
+            href = link['href']
+            if '/album' in href:
+                if href.startswith('/'):
+                    full_url = f"https://{href[2:]}" if href[2:] else f"https://{href[1:]}"
+                else:
+                    full_url = href
+                album_links.append(full_url)
+
+        return album_links
     else:
-        return artist_link
+        print(f"Failed to fetch the page: {url}, Status Code: {response.status_code}")
+        return []
 
-# Main function to download random albums
+def download_albums(album_links, num_albums):
+    """Download specified number of albums using bandcamp-dl."""
+    num_downloaded = 0
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+
+    for link in album_links:
+        if num_downloaded >= num_albums:
+            break
+        print(f"Downloading album: {link}")
+        os.system(f"{dir_path}/venforscript/bin/bandcamp-dl --base-dir=\"{dir_path}/music\" --full-album --embed-art --template=\"%{{album}}/%{{track}} - %{{title}}\" {link}")
+        num_downloaded += 1
+
+    if num_downloaded == 0:
+        print("No albums downloaded.")
+    else:
+        print(f"Downloaded {num_downloaded} album(s).")
+
 def main():
-    amount = 4  # Hardcoded to 4 albums
-    main_link = "https://bandcamp.com/artist_index"
+    # Check if a number is passed as a command-line argument
+    if len(sys.argv) > 1:
+        try:
+            num_iterations = int(sys.argv[1])
+            print(f"Number of iterations to run: {num_iterations} (from command-line)")
+        except ValueError:
+            print("Invalid number parameter provided. Please enter a valid integer.")
+            return
+    else:
+        try:
+            num_iterations = int(input("Enter the number of iterations to run: "))
+        except ValueError:
+            print("Invalid input. Please enter a valid integer.")
+            return
 
-    for x in range(amount):
-        random_artist_page = select_random_artist_page(main_link)
-        random_artist_link = select_random_artist(random_artist_page)
-        random_album_link = select_random_album(random_artist_link)
+    for i in range(num_iterations):
+        print(f"Iteration {i + 1} of {num_iterations}")
+        album_links = get_album_links()
 
-        print(f"{x + 1}: {random_album_link}")
-        os.system(f"bandcamp-dl --base-dir='./music' --full-album --embed-art --template='%{{album}}/%{{track}} - %{{title}}' {random_album_link}")
+        if album_links:
+            print(f"Found {len(album_links)} album(s). Downloading...")
+            download_albums(album_links, len(album_links))
+        else:
+            print("No album links found.")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
